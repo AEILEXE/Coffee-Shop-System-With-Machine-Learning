@@ -30,6 +30,26 @@ class POSService:
         """Initialize POS service."""
         self.db_path = db_path
 
+    def add_product(self, name: str, category: str, price: float, cost: float, description: str = "") -> bool:
+        """
+        Add a new product to the database.
+        """
+        query = """
+            INSERT INTO products (name, category, price, cost, description, is_active)
+            VALUES (?, ?, ?, ?, ?, 1)
+        """
+        try:
+            if self.db_path:
+                with get_db_connection(self.db_path) as db:
+                    db.execute(query, (name, category, price, cost, description), commit=True)
+            else:
+                with get_db_connection() as db:
+                    db.execute(query, (name, category, price, cost, description), commit=True)
+            return True
+        except Exception as e:
+            print(f"Error adding product: {e}")
+            return False
+
     def get_all_products(self) -> List[Dict]:
         """
         Fetch all active products from database.

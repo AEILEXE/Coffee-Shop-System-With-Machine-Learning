@@ -312,6 +312,33 @@ def _seed_default_products(cursor) -> None:
         )
 
 
+def _seed_default_ingredients(cursor) -> None:
+    """
+    Create default ingredients if they don't exist.
+    Useful for testing inventory add and menu logic.
+    Args:
+        cursor: Database cursor.
+    """
+    default_ingredients = [
+        {'name': 'Coffee Beans', 'unit': 'kg', 'cost_per_unit': 500, 'reorder_level': 5},
+        {'name': 'Milk', 'unit': 'liter', 'cost_per_unit': 60, 'reorder_level': 10},
+        {'name': 'Sugar', 'unit': 'kg', 'cost_per_unit': 40, 'reorder_level': 8},
+        {'name': 'Chocolate Syrup', 'unit': 'liter', 'cost_per_unit': 120, 'reorder_level': 3},
+        {'name': 'Tea Leaves', 'unit': 'kg', 'cost_per_unit': 300, 'reorder_level': 2},
+        {'name': 'Butter', 'unit': 'kg', 'cost_per_unit': 250, 'reorder_level': 2},
+        {'name': 'Eggs', 'unit': 'pieces', 'cost_per_unit': 8, 'reorder_level': 30},
+        {'name': 'Flour', 'unit': 'kg', 'cost_per_unit': 50, 'reorder_level': 10},
+    ]
+    for ing in default_ingredients:
+        cursor.execute("SELECT id FROM ingredients WHERE name = ?", (ing['name'],))
+        if cursor.fetchone():
+            continue
+        cursor.execute(
+            """INSERT INTO ingredients (name, unit, cost_per_unit, reorder_level, is_active)
+                   VALUES (?, ?, ?, ?, 1)""",
+            (ing['name'], ing['unit'], ing['cost_per_unit'], ing['reorder_level'])
+        )
+
 def init_database(db_path: Optional[str] = None) -> bool:
     """
     Initialize database by creating all required tables if they don't exist.
@@ -342,9 +369,10 @@ def init_database(db_path: Optional[str] = None) -> bool:
         
         # Seed default users if they don't exist
         _seed_default_users(cursor)
-        
         # Seed default products if they don't exist
         _seed_default_products(cursor)
+        # Seed default ingredients for testing
+        _seed_default_ingredients(cursor)
         
         conn.commit()
         conn.close()

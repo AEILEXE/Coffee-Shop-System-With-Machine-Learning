@@ -64,93 +64,117 @@ class Dashboard:
         self._show_login()
 
     def _build_layout(self):
-        """Build main dashboard layout structure."""
-        # Main container
         if CTK_AVAILABLE:
             main_container = ctk.CTkFrame(self.root, fg_color=COLOR_PRIMARY_BG)
         else:
             main_container = tk.Frame(self.root, bg=COLOR_PRIMARY_BG)
         main_container.pack(fill="both", expand=True)
 
-        # Header
+        # Header (Top Navigation Bar)
         self._build_header(main_container)
 
-        # Body container (sidebar + content)
+        # Main body container
         if CTK_AVAILABLE:
             body_container = ctk.CTkFrame(main_container, fg_color=COLOR_PRIMARY_BG)
         else:
             body_container = tk.Frame(main_container, bg=COLOR_PRIMARY_BG)
-        body_container.pack(fill="both", expand=True, padx=0, pady=0)
+
+        body_container.pack(fill="both", expand=True)
+
         body_container.grid_columnconfigure(1, weight=1)
         body_container.grid_rowconfigure(0, weight=1)
 
-        # Sidebar
+        # Sidebar (Left Navigation Panel)
         self.sidebar_frame = self._build_sidebar(body_container)
-        self.sidebar_frame.grid(row=0, column=0, sticky="nsw")
+        self.sidebar_frame.grid(row=0, column=0, sticky="ns")
 
-        # Content area
-        self.content_frame = self._build_content_area(body_container)
-        self.content_frame.grid(row=0, column=1, sticky="nsew", padx=12, pady=12)
+        # Content Wrapper (adds spacing around content)
+        if CTK_AVAILABLE:
+            content_wrapper = ctk.CTkFrame(
+                body_container,
+                fg_color="transparent"
+            )
+        else:
+            content_wrapper = tk.Frame(body_container, bg=COLOR_PRIMARY_BG)
+
+        content_wrapper.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+
+        content_wrapper.grid_columnconfigure(0, weight=1)
+        content_wrapper.grid_rowconfigure(0, weight=1)
+
+        # Main Content Area (Card Style)
+        self.content_frame = self._build_content_area(content_wrapper)
+        self.content_frame.grid(row=0, column=0, sticky="nsew")
 
     def _build_header(self, parent):
-        """Build header with app title and user info."""
         if CTK_AVAILABLE:
             header = ctk.CTkFrame(
                 parent,
-                height=80,
-                corner_radius=0,
+                height=70,
                 fg_color=COLOR_SECONDARY_BG,
+                corner_radius=0,
             )
         else:
-            header = tk.Frame(parent, height=80, bg=COLOR_SECONDARY_BG)
-        header.pack(fill="x", padx=0, pady=0)
+            header = tk.Frame(parent, height=70, bg=COLOR_SECONDARY_BG)
+
+        header.pack(fill="x")
         header.pack_propagate(False)
 
-        # Left side - App title
+        # Left: App Title
         if CTK_AVAILABLE:
             title_label = ctk.CTkLabel(
                 header,
-                text=APP_NAME,
-                font=ctk.CTkFont(size=24, weight="bold"),
+                text=f"{APP_NAME}",
+                font=ctk.CTkFont(size=22, weight="bold"),
                 text_color=COLOR_ACCENT,
-            )
-            title_label.pack(side="left", padx=20, pady=20)
-
-            # Right side - User info
-            self.user_info_label = ctk.CTkLabel(
-                header,
-                text="",
-                font=ctk.CTkFont(size=12),
-                text_color=COLOR_TEXT_PRIMARY,
             )
         else:
             title_label = tk.Label(
                 header,
                 text=APP_NAME,
-                font=("Georgia", 24, "bold"),
+                font=("Georgia", 22, "bold"),
                 fg=COLOR_ACCENT,
                 bg=COLOR_SECONDARY_BG,
             )
-            title_label.pack(side="left", padx=20, pady=20)
 
-            # Right side - User info
-            self.user_info_label = tk.Label(
+        title_label.pack(side="left", padx=25)
+
+        # Right: User Info (inside subtle frame)
+        if CTK_AVAILABLE:
+            user_frame = ctk.CTkFrame(
                 header,
+                fg_color="transparent"
+            )
+        else:
+            user_frame = tk.Frame(header, bg=COLOR_SECONDARY_BG)
+
+        user_frame.pack(side="right", padx=25)
+
+        if CTK_AVAILABLE:
+            self.user_info_label = ctk.CTkLabel(
+                user_frame,
+                text="",
+                font=ctk.CTkFont(size=12),
+                text_color=COLOR_TEXT_PRIMARY,
+            )
+        else:
+            self.user_info_label = tk.Label(
+                user_frame,
                 text="",
                 font=("Sans", 12),
                 fg=COLOR_TEXT_PRIMARY,
                 bg=COLOR_SECONDARY_BG,
             )
-        self.user_info_label.pack(side="right", padx=20, pady=20)
+
+        self.user_info_label.pack()
 
     def _build_sidebar(self, parent):
-        """Build sidebar navigation."""
         if CTK_AVAILABLE:
             sidebar = ctk.CTkFrame(
                 parent,
                 width=SIDEBAR_WIDTH,
-                corner_radius=0,
                 fg_color=COLOR_SECONDARY_BG,
+                corner_radius=0,
             )
         else:
             sidebar = tk.Frame(
@@ -158,38 +182,47 @@ class Dashboard:
                 width=SIDEBAR_WIDTH,
                 bg=COLOR_SECONDARY_BG,
             )
+
         sidebar.pack_propagate(False)
 
-        # Sidebar title
+        # Logo / Navigation Label
         if CTK_AVAILABLE:
             sidebar_title = ctk.CTkLabel(
                 sidebar,
-                text="Navigation",
-                font=ctk.CTkFont(size=16, weight="bold"),
+                text="MENU",
+                font=ctk.CTkFont(size=14, weight="bold"),
                 text_color=COLOR_ACCENT,
             )
-            sidebar_title.pack(pady=(20, 15), padx=15)
         else:
             sidebar_title = tk.Label(
                 sidebar,
-                text="Navigation",
-                font=("Georgia", 16, "bold"),
+                text="MENU",
+                font=("Georgia", 14, "bold"),
                 fg=COLOR_ACCENT,
                 bg=COLOR_SECONDARY_BG,
             )
-            sidebar_title.pack(pady=(20, 15), padx=15)
 
-        # Buttons container
+        sidebar_title.pack(pady=(30, 20))
+
+        # Divider
+        if CTK_AVAILABLE:
+            divider = ctk.CTkFrame(sidebar, height=2, fg_color="#3a3a4e")
+        else:
+            divider = tk.Frame(sidebar, height=2, bg="#3a3a4e")
+
+        divider.pack(fill="x", padx=20, pady=(0, 20))
+
         self.sidebar_buttons_frame = sidebar
 
-        # Logout button (at bottom)
+        # Logout button (bottom)
         if CTK_AVAILABLE:
             logout_btn = ctk.CTkButton(
                 sidebar,
                 text="Logout",
-                width=SIDEBAR_WIDTH - 30,
+                width=SIDEBAR_WIDTH - 40,
                 fg_color=COLOR_ERROR,
-                hover_color="#a02020",
+                hover_color="#b02a2a",
+                corner_radius=8,
                 command=self._logout,
             )
         else:
@@ -202,20 +235,21 @@ class Dashboard:
                 relief="flat",
                 command=self._logout,
             )
-        logout_btn.pack(side="bottom", pady=20, padx=15)
+
+        logout_btn.pack(side="bottom", pady=25, padx=20)
 
         return sidebar
 
     def _build_content_area(self, parent):
-        """Build main content area."""
         if CTK_AVAILABLE:
             content = ctk.CTkFrame(
                 parent,
-                corner_radius=10,
-                fg_color="#2a2a3e",
+                corner_radius=15,
+                fg_color="#252537",
             )
         else:
-            content = tk.Frame(parent, bg="#2a2a3e")
+            content = tk.Frame(parent, bg="#252537")
+
         return content
 
     def _show_login(self):

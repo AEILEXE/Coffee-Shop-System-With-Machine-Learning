@@ -79,67 +79,94 @@ class Sidebar:
         self._build_sidebar()
 
     def _build_sidebar(self):
-        """Build sidebar structure."""
+        """Modern structured sidebar layout."""
+
+        # Top spacing
+        if CTK_AVAILABLE:
+            top_section = ctk.CTkFrame(self.frame, fg_color="transparent")
+        else:
+            top_section = tk.Frame(self.frame, bg=COLOR_SECONDARY_BG)
+
+        top_section.pack(fill="x", pady=(25, 10))
+
         # Title
         if CTK_AVAILABLE:
             title = ctk.CTkLabel(
-                self.frame,
-                text="Navigation",
-                font=ctk.CTkFont(size=16, weight="bold"),
+                top_section,
+                text="MENU",
+                font=ctk.CTkFont(size=14, weight="bold"),
                 text_color=COLOR_ACCENT,
             )
         else:
             title = tk.Label(
-                self.frame,
-                text="Navigation",
-                font=("Georgia", 16, "bold"),
+                top_section,
+                text="MENU",
+                font=("Georgia", 14, "bold"),
                 fg=COLOR_ACCENT,
                 bg=COLOR_SECONDARY_BG,
             )
-        title.pack(pady=(20, 15), padx=15)
 
-        # Scrollable modules section
+        title.pack(anchor="w", padx=20)
+
+        # Divider line
+        if CTK_AVAILABLE:
+            divider = ctk.CTkFrame(self.frame, height=2, fg_color="#3a3a4e")
+        else:
+            divider = tk.Frame(self.frame, height=2, bg="#3a3a4e")
+
+        divider.pack(fill="x", padx=20, pady=(10, 15))
+
+        # Modules section
         if CTK_AVAILABLE:
             self.modules_frame = ctk.CTkFrame(
                 self.frame,
-                fg_color="transparent",
+                fg_color="transparent"
             )
         else:
             self.modules_frame = tk.Frame(
                 self.frame,
-                bg=COLOR_SECONDARY_BG,
+                bg=COLOR_SECONDARY_BG
             )
-        self.modules_frame.pack(fill="both", expand=True, padx=15, pady=10)
 
-        # Build module buttons
+        self.modules_frame.pack(fill="both", expand=True, padx=15)
+
         self._build_module_buttons()
 
-        # Bottom section (spacer + logout)
+        # Bottom section (logout area separated visually)
         if CTK_AVAILABLE:
-            bottom_frame = ctk.CTkFrame(
+            bottom_section = ctk.CTkFrame(
                 self.frame,
-                fg_color="transparent",
+                fg_color="transparent"
             )
         else:
-            bottom_frame = tk.Frame(
+            bottom_section = tk.Frame(
                 self.frame,
-                bg=COLOR_SECONDARY_BG,
+                bg=COLOR_SECONDARY_BG
             )
-        bottom_frame.pack(fill="x", padx=15, pady=15)
+
+        bottom_section.pack(fill="x", pady=(10, 20), padx=15)
+
+        if CTK_AVAILABLE:
+            bottom_divider = ctk.CTkFrame(bottom_section, height=2, fg_color="#3a3a4e")
+        else:
+            bottom_divider = tk.Frame(bottom_section, height=2, bg="#3a3a4e")
+
+        bottom_divider.pack(fill="x", pady=(0, 15))
 
         # Logout button
         if CTK_AVAILABLE:
             logout_btn = ctk.CTkButton(
-                bottom_frame,
+                bottom_section,
                 text="Logout",
-                width=SIDEBAR_WIDTH - 30,
+                width=SIDEBAR_WIDTH - 40,
                 fg_color=COLOR_ERROR,
-                hover_color="#a02020",
+                hover_color="#b02a2a",
+                corner_radius=8,
                 command=self._on_logout_clicked,
             )
         else:
             logout_btn = tk.Button(
-                bottom_frame,
+                bottom_section,
                 text="Logout",
                 width=25,
                 bg=COLOR_ERROR,
@@ -147,7 +174,8 @@ class Sidebar:
                 relief="flat",
                 command=self._on_logout_clicked,
             )
-        logout_btn.pack(side="bottom")
+
+        logout_btn.pack()
 
     def _build_module_buttons(self):
         """Build navigation buttons for accessible modules."""
@@ -164,12 +192,6 @@ class Sidebar:
             self._add_module_button(module)
 
     def _add_module_button(self, module: Dict):
-        """
-        Add a module button to the sidebar.
-
-        Args:
-            module: Module dict with 'key' and 'label'.
-        """
         module_key = module["key"]
         module_label = module["label"]
 
@@ -177,23 +199,27 @@ class Sidebar:
             btn = ctk.CTkButton(
                 self.modules_frame,
                 text=module_label,
-                width=SIDEBAR_WIDTH - 30,
-                fg_color="#3a3a4e",
-                hover_color="#4a4a5e",
+                width=SIDEBAR_WIDTH - 40,
+                fg_color="#2f2f44",
+                hover_color="#40405c",
+                corner_radius=8,
+                anchor="w",
                 command=lambda: self._on_module_clicked(module_key),
             )
         else:
             btn = tk.Button(
                 self.modules_frame,
                 text=module_label,
-                width=25,
-                bg="#3a3a4e",
+                width=24,
+                bg="#2f2f44",
                 fg=COLOR_TEXT_PRIMARY,
-                activebackground="#4a4a5e",
+                activebackground="#40405c",
                 relief="flat",
+                anchor="w",
                 command=lambda: self._on_module_clicked(module_key),
             )
-        btn.pack(pady=8, fill="x")
+
+        btn.pack(pady=6, fill="x")
 
         self.module_buttons[module_key] = btn
 
@@ -212,26 +238,34 @@ class Sidebar:
             self.on_logout()
 
     def set_active_module(self, module_name: str):
-        """
-        Highlight the active module button.
+        """Highlight the active module button with stronger visual feedback."""
 
-        Args:
-            module_name: Module name to highlight.
-        """
-        # Reset all buttons to default color
+        # Reset all buttons
         for btn in self.module_buttons.values():
             if CTK_AVAILABLE:
-                btn.configure(fg_color="#3a3a4e")
+                btn.configure(
+                    fg_color="#2f2f44",
+                    text_color=COLOR_TEXT_PRIMARY
+                )
             else:
-                btn.configure(bg="#3a3a4e")
+                btn.configure(
+                    bg="#2f2f44",
+                    fg=COLOR_TEXT_PRIMARY
+                )
 
-        # Highlight active button
+        # Highlight selected
         if module_name in self.module_buttons:
             btn = self.module_buttons[module_name]
             if CTK_AVAILABLE:
-                btn.configure(fg_color=COLOR_ACCENT)
+                btn.configure(
+                    fg_color=COLOR_ACCENT,
+                    text_color="#1a1a2e"
+                )
             else:
-                btn.configure(bg=COLOR_ACCENT, fg="#1a1a2e")
+                btn.configure(
+                    bg=COLOR_ACCENT,
+                    fg="#1a1a2e"
+                )
 
         self.active_module = module_name
 
@@ -339,46 +373,48 @@ class SimpleSidebar:
         self._build()
 
     def _build(self):
-        """Build simple sidebar."""
         if CTK_AVAILABLE:
             modules_frame = ctk.CTkFrame(
                 self.frame,
-                fg_color="transparent",
+                fg_color="transparent"
             )
         else:
             modules_frame = tk.Frame(
                 self.frame,
-                bg=COLOR_SECONDARY_BG,
+                bg=COLOR_SECONDARY_BG
             )
-        modules_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Create buttons
+        modules_frame.pack(fill="both", expand=True, padx=15, pady=20)
+
         for module in self.modules:
             btn = self._create_button(modules_frame, module)
             self.module_buttons[module["key"]] = btn
 
     def _create_button(self, parent, module: Dict):
-        """Create a module button."""
         if CTK_AVAILABLE:
             btn = ctk.CTkButton(
                 parent,
                 text=module["label"],
-                width=SIDEBAR_WIDTH - 20,
-                fg_color="#3a3a4e",
-                hover_color="#4a4a5e",
+                width=SIDEBAR_WIDTH - 40,
+                fg_color="#2f2f44",
+                hover_color="#40405c",
+                corner_radius=8,
+                anchor="w",
                 command=lambda: self._button_clicked(module["key"]),
             )
         else:
             btn = tk.Button(
                 parent,
                 text=module["label"],
-                width=22,
-                bg="#3a3a4e",
+                width=24,
+                bg="#2f2f44",
                 fg=COLOR_TEXT_PRIMARY,
                 relief="flat",
+                anchor="w",
                 command=lambda: self._button_clicked(module["key"]),
             )
-        btn.pack(pady=5, fill="x")
+
+        btn.pack(pady=6, fill="x")
         return btn
 
     def _button_clicked(self, module_key: str):
@@ -388,21 +424,30 @@ class SimpleSidebar:
             self.on_module_selected(module_key)
 
     def set_active(self, module_key: str):
-        """Highlight active module."""
-        # Reset all
         for btn in self.module_buttons.values():
             if CTK_AVAILABLE:
-                btn.configure(fg_color="#3a3a4e")
+                btn.configure(
+                    fg_color="#2f2f44",
+                    text_color=COLOR_TEXT_PRIMARY
+                )
             else:
-                btn.configure(bg="#3a3a4e")
+                btn.configure(
+                    bg="#2f2f44",
+                    fg=COLOR_TEXT_PRIMARY
+                )
 
-        # Highlight active
         if module_key in self.module_buttons:
             btn = self.module_buttons[module_key]
             if CTK_AVAILABLE:
-                btn.configure(fg_color=COLOR_ACCENT)
+                btn.configure(
+                    fg_color=COLOR_ACCENT,
+                    text_color="#1a1a2e"
+                )
             else:
-                btn.configure(bg=COLOR_ACCENT, fg="#1a1a2e")
+                btn.configure(
+                    bg=COLOR_ACCENT,
+                    fg="#1a1a2e"
+                )
 
         self.active_module = module_key
 

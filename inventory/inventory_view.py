@@ -358,7 +358,7 @@ class InventoryView:
             form_frame = tk.Frame(dialog, bg=COLOR_PRIMARY_BG)
         form_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
-        labels = ["Ingredient Name:", "Unit:", "Reorder Level:"]
+        labels = ["Ingredient Name:", "Unit:", "Cost per Unit:", "Reorder Level:"]
         for i, label_text in enumerate(labels):
             if CTK_AVAILABLE:
                 lbl = ctk.CTkLabel(
@@ -390,31 +390,29 @@ class InventoryView:
             name = fields["ingredient"].get().strip()
             unit = fields["unit"].get().strip()
             try:
+                cost_per_unit = float(fields["cost"].get())
                 reorder_level = float(fields["reorder"].get())
             except ValueError:
-                messagebox.showerror("Invalid Input", "Reorder level must be a number")
+                messagebox.showerror("Invalid Input", "Cost and Reorder level must be numbers")
                 return
 
             if not name or not unit:
                 messagebox.showwarning("Missing Fields", "Please fill all fields")
                 return
 
-            ingredient = {
-                "name": name,
-                "unit": unit,
-                "quantity": 0,
-                "reorder_level": reorder_level,
-            }
-
-            if self.on_ingredient_added:
-                self.on_ingredient_added(ingredient)
-
-            # Add to local list
-            self.inventory.append(ingredient)
-            self._refresh_inventory_display()
-
-            messagebox.showinfo("Success", f"Ingredient '{name}' added")
-            dialog.destroy()
+            # Save to DB
+            from inventory.inventory_service import InventoryService
+            service = InventoryService()
+            success = service.add_ingredient(name, unit, cost_per_unit, reorder_level)
+            if success:
+                messagebox.showinfo("Success", f"Ingredient '{name}' added!")
+                if hasattr(self, 'refresh_inventory'):
+                    self.refresh_inventory()
+                else:
+                    self._refresh_inventory()
+                dialog.destroy()
+            else:
+                messagebox.showerror("Error", "Failed to add ingredient. It may already exist.")
 
         if CTK_AVAILABLE:
             save_btn = ctk.CTkButton(

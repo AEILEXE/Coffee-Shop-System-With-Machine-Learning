@@ -78,10 +78,10 @@ class ReportsManager:
         """Handle date range change."""
         self._load_reports(start_date, end_date)
 
-    def _handle_export(self, format_type: str):
+    def _handle_export(self, from_date: str, to_date: str):
         """Handle report export."""
         try:
-            messagebox.showinfo("Export", f"Export to {format_type} not yet implemented")
+            messagebox.showinfo("Export", f"Export from {from_date} to {to_date} not yet implemented")
         except Exception as e:
             messagebox.showerror("Error", f"Export failed: {e}")
 

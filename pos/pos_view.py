@@ -38,6 +38,7 @@ from config.settings import (
     FONT_HEADING,
     FONT_NORMAL,
 )
+from reports.reports_service import ReportsService
 
 
 class POSView:
@@ -70,6 +71,10 @@ class POSView:
         # Products
         self.products = []  # List of product dicts
         self.categories = ["All"]  # Available categories
+
+        # Reports
+        self.reports_service = ReportsService()
+        self.reports = []  # List of report dicts
 
         # Build POS interface
         self._build_ui()
@@ -288,14 +293,15 @@ class POSView:
         if selected_cat != "All":
             filtered = [p for p in self.products if p.get("category") == selected_cat]
 
-        # Add items to tree
-        for idx, product in enumerate(filtered):
-            values = (
-                product["name"],
-                f"₱ {product['price']:.2f}",
-                "Add",
-            )
-            self.products_tree.insert("", "end", iid=str(product["id"]), values=values)
+            # Add items to tree
+            for idx, product in enumerate(filtered):
+                values = (
+                    product["name"],
+                    f"₱ {product['price']:.2f}",
+                    "Add",
+                )
+                # Set iid and text to product id for robust add-to-cart
+                self.products_tree.insert("", "end", iid=str(product["id"]), text=str(product["id"]), values=values)
 
     def _build_order_section(self, parent):
         """Build middle section with order items and controls."""
