@@ -19,7 +19,7 @@ except ImportError:
     import tkinter as tk
     CTK_AVAILABLE = False
 
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from auth.login import LoginScreen
 from auth.permissions import (
     get_accessible_sidebar_modules,
@@ -221,6 +221,8 @@ class Dashboard:
     def _show_login(self):
         """Show login screen."""
         self._clear_content()
+        self._clear_sidebar_modules()
+        self._update_header()
         # Render the login UI inside the content area so header/sidebar persist
         LoginScreen(self.content_frame, on_login_success=self._on_login_success)
 
@@ -256,6 +258,8 @@ class Dashboard:
         if self.current_user:
             user_text = f"User: {self.current_user['name']} | Role: {self.current_user['role'].upper()}"
             self.user_info_label.configure(text=user_text)
+        else:
+            self.user_info_label.configure(text="")
 
     def _build_sidebar_buttons(self):
         """Build navigation buttons based on user role."""
@@ -382,9 +386,6 @@ class Dashboard:
             
             # Simple placeholder for now - shows user list
             if CTK_AVAILABLE:
-                import customtkinter as ctk
-                from tkinter import ttk
-                
                 frame = ctk.CTkFrame(self.content_frame, fg_color=COLOR_PRIMARY_BG)
                 frame.pack(fill="both", expand=True, padx=10, pady=10)
                 
@@ -395,33 +396,47 @@ class Dashboard:
                     text_color=COLOR_ACCENT,
                 )
                 title.pack(pady=20)
-                
-                # Users table
-                tree_frame = ctk.CTkFrame(frame, fg_color="transparent")
-                tree_frame.pack(fill="both", expand=True, padx=10, pady=10)
-                
-                cols = ("Username", "Full Name", "Role", "Active")
-                tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=15)
-                tree.heading("Username", text="Username")
-                tree.heading("Full Name", text="Full Name")
-                tree.heading("Role", text="Role")
-                tree.heading("Active", text="Active")
-                
-                tree.column("Username", width=120)
-                tree.column("Full Name", width=150)
-                tree.column("Role", width=100)
-                tree.column("Active", width=60)
-                
-                for user in users:
-                    active_text = "Yes" if user["is_active"] else "No"
-                    tree.insert("", "end", values=(
-                        user["username"],
-                        user["full_name"],
-                        user["role"],
-                        active_text,
-                    ))
-                
-                tree.pack(fill="both", expand=True)
+                tree_parent = ctk.CTkFrame(frame, fg_color="transparent")
+                tree_parent.pack(fill="both", expand=True, padx=10, pady=10)
+            else:
+                frame = tk.Frame(self.content_frame, bg=COLOR_PRIMARY_BG)
+                frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+                title = tk.Label(
+                    frame,
+                    text="User Management",
+                    font=("Georgia", 24, "bold"),
+                    fg=COLOR_ACCENT,
+                    bg=COLOR_PRIMARY_BG,
+                )
+                title.pack(pady=20)
+
+                tree_parent = tk.Frame(frame, bg=COLOR_PRIMARY_BG)
+                tree_parent.pack(fill="both", expand=True, padx=10, pady=10)
+
+            # Users table (shared for CTK and Tk)
+            cols = ("Username", "Full Name", "Role", "Active")
+            tree = ttk.Treeview(tree_parent, columns=cols, show="headings", height=15)
+            tree.heading("Username", text="Username")
+            tree.heading("Full Name", text="Full Name")
+            tree.heading("Role", text="Role")
+            tree.heading("Active", text="Active")
+
+            tree.column("Username", width=120)
+            tree.column("Full Name", width=150)
+            tree.column("Role", width=100)
+            tree.column("Active", width=60)
+
+            for user in users:
+                active_text = "Yes" if user["is_active"] else "No"
+                tree.insert("", "end", values=(
+                    user["username"],
+                    user["full_name"],
+                    user["role"],
+                    active_text,
+                ))
+
+            tree.pack(fill="both", expand=True)
         except Exception as e:
             self._show_placeholder("User Management")
             from tkinter import messagebox
@@ -507,11 +522,21 @@ class Dashboard:
             for widget in self.content_frame.winfo_children():
                 widget.destroy()
 
+    def _clear_sidebar_modules(self):
+        """Remove sidebar module buttons (leave title and logout)."""
+        if not hasattr(self, "sidebar_buttons_frame"):
+            return
+        for widget in self.sidebar_buttons_frame.winfo_children():
+            if hasattr(widget, "_is_module_button"):
+                widget.destroy()
+
     def _logout(self):
         """Logout current user."""
         if messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?"):
             self.current_user = None
             self._clear_content()
+            self._clear_sidebar_modules()
+            self._update_header()
             self._show_login()
 
     def show(self):
