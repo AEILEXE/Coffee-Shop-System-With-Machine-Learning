@@ -18,8 +18,10 @@ except ImportError:
     import tkinter as tk
     CTK_AVAILABLE = False
 
+# ✓ CORRECTED: Import init_database from database package (exported in __init__.py)
 from database import init_database
-from gui_app import CafeCraftGUI
+# ✓ CORRECTED: Import Dashboard class (not CafeCraftGUI which doesn't exist)
+from ui import Dashboard
 
 
 def setup_window():
@@ -40,14 +42,14 @@ def setup_window():
 
 def main():
     """Application startup entry point."""
-    # Initialize database
+    # ✓ CORRECTED: init_database() now imported from database.schema
     init_database()
 
     # Create and configure main window
     root = setup_window()
 
-    # Initialize GUI application
-    app = CafeCraftGUI()
+    # ✓ CORRECTED: Dashboard class (was CafeCraftGUI) - pass root window to constructor
+    app = Dashboard(root)
 
     # Start the application event loop
     root.mainloop()

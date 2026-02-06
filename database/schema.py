@@ -11,7 +11,8 @@ No GUI dependencies.
 """
 
 from .db import get_connection
-from typing import Optional
+from typing import Optional, Dict, Any, Tuple
+from utils.security import verify_password
 
 
 # SQL CREATE TABLE statements
@@ -182,6 +183,78 @@ ALL_TABLES = [
 ]
 
 
+def _seed_default_users(cursor) -> None:
+    """
+    Create default users if they don't exist.
+    
+    Default users:
+    - owner / OwnerPass123! (Owner role - full access)
+    - employee1 / Emp1Pass123! (Employee role - basic access)
+    - employee2 / Emp2Pass123! (Employee role - basic access)
+    
+    Args:
+        cursor: Database cursor.
+    """
+    from utils.security import hash_password
+    
+    default_users = [
+        {
+            'username': 'owner',
+            'password': 'OwnerPass123!',
+            'full_name': 'System Owner',
+            'role': 'owner',
+            'can_pos': 1,
+            'can_inventory': 1,
+            'can_reports': 1,
+            'can_user_management': 1,
+        },
+        {
+            'username': 'employee1',
+            'password': 'Emp1Pass123!',
+            'full_name': 'Employee One',
+            'role': 'employee',
+            'can_pos': 1,
+            'can_inventory': 0,
+            'can_reports': 0,
+            'can_user_management': 0,
+        },
+        {
+            'username': 'employee2',
+            'password': 'Emp2Pass123!',
+            'full_name': 'Employee Two',
+            'role': 'employee',
+            'can_pos': 1,
+            'can_inventory': 0,
+            'can_reports': 0,
+            'can_user_management': 0,
+        },
+    ]
+    
+    for user in default_users:
+        # Check if user already exists
+        cursor.execute("SELECT id FROM users WHERE username = ?", (user['username'],))
+        if cursor.fetchone():
+            continue  # User already exists, skip
+        
+        # Create user
+        password_hash = hash_password(user['password'])
+        cursor.execute(
+            """INSERT INTO users 
+               (username, password_hash, full_name, role, can_pos, can_inventory, can_reports, can_user_management)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                user['username'],
+                password_hash,
+                user['full_name'],
+                user['role'],
+                user['can_pos'],
+                user['can_inventory'],
+                user['can_reports'],
+                user['can_user_management'],
+            )
+        )
+
+
 def init_database(db_path: Optional[str] = None) -> bool:
     """
     Initialize database by creating all required tables if they don't exist.
@@ -209,6 +282,9 @@ def init_database(db_path: Optional[str] = None) -> bool:
         
         # Create indexes for better query performance
         _create_indexes(cursor)
+        
+        # Seed default users if they don't exist
+        _seed_default_users(cursor)
         
         conn.commit()
         conn.close()
@@ -356,3 +432,52 @@ def get_table_info(db_path: Optional[str] = None) -> dict:
         return table_info
     except Exception as e:
         raise Exception(f"Failed to get table info: {e}")
+
+
+def verify_user(username: str, password: str) -> Dict[str, Any] | None:
+    """
+    Verify user credentials against database.
+    
+    Args:
+        username: Username to authenticate
+        password: Plain text password to verify
+        
+    Returns:
+        Dict with user info {id, username, full_name, role, can_pos, can_inventory, 
+        can_reports, can_user_management} if authenticated, None otherwise
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        
+        # Get user from database
+        cursor.execute(
+            """SELECT id, username, full_name, role, can_pos, can_inventory, 
+               can_reports, can_user_management, password_hash 
+               FROM users WHERE username = ?""",
+            (username,)
+        )
+        user_row = cursor.fetchone()
+        conn.close()
+        
+        if not user_row:
+            return None
+        
+        # Verify password using security module
+        stored_hash = user_row['password_hash']
+        if not verify_password(password, stored_hash):
+            return None
+        
+        # Return user info as dict (excluding password hash)
+        return {
+            'id': user_row['id'],
+            'username': user_row['username'],
+            'name': user_row['full_name'],
+            'role': user_row['role'],
+            'can_pos': user_row['can_pos'],
+            'can_inventory': user_row['can_inventory'],
+            'can_reports': user_row['can_reports'],
+            'can_user_management': user_row['can_user_management'],
+        }
+    except Exception as e:
+        raise Exception(f"Error verifying user: {e}")

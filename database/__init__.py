@@ -13,6 +13,7 @@ from .schema import (
     init_database,
     drop_all_tables,
     get_table_info,
+    verify_user,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "init_database",
     "drop_all_tables",
     "get_table_info",
+    "verify_user",
 ]
