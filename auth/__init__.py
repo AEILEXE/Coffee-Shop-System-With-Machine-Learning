@@ -19,9 +19,11 @@ from .permissions import (
     get_sidebar_modules,
     get_accessible_sidebar_modules,
 )
+from .user_management_service import UserManagementService
 
 __all__ = [
     "LoginScreen",
+    "UserManagementService",
     "can_access",
     "get_accessible_modules",
     "get_inaccessible_modules",

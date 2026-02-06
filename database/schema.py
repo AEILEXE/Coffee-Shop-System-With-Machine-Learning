@@ -255,6 +255,63 @@ def _seed_default_users(cursor) -> None:
         )
 
 
+def _seed_default_products(cursor) -> None:
+    """
+    Create default products if they don't exist.
+    
+    Default products for a coffee shop.
+    
+    Args:
+        cursor: Database cursor.
+    """
+    default_products = [
+        # Hot Beverages
+        {'name': 'Espresso', 'category': 'Hot Beverages', 'price': 60, 'cost': 15},
+        {'name': 'Americano', 'category': 'Hot Beverages', 'price': 80, 'cost': 20},
+        {'name': 'Cappuccino', 'category': 'Hot Beverages', 'price': 120, 'cost': 35},
+        {'name': 'Latte', 'category': 'Hot Beverages', 'price': 130, 'cost': 40},
+        {'name': 'Mocha', 'category': 'Hot Beverages', 'price': 140, 'cost': 45},
+        {'name': 'Macchiato', 'category': 'Hot Beverages', 'price': 110, 'cost': 30},
+        
+        # Iced Beverages
+        {'name': 'Iced Coffee', 'category': 'Iced Beverages', 'price': 90, 'cost': 25},
+        {'name': 'Iced Latte', 'category': 'Iced Beverages', 'price': 130, 'cost': 40},
+        {'name': 'Iced Cappuccino', 'category': 'Iced Beverages', 'price': 130, 'cost': 40},
+        {'name': 'Cold Brew', 'category': 'Iced Beverages', 'price': 110, 'cost': 30},
+        
+        # Tea
+        {'name': 'Green Tea', 'category': 'Tea', 'price': 70, 'cost': 15},
+        {'name': 'Black Tea', 'category': 'Tea', 'price': 70, 'cost': 15},
+        {'name': 'Milk Tea', 'category': 'Tea', 'price': 100, 'cost': 25},
+        {'name': 'Matcha Latte', 'category': 'Tea', 'price': 140, 'cost': 40},
+        
+        # Pastries & Food
+        {'name': 'Croissant', 'category': 'Pastries', 'price': 80, 'cost': 25},
+        {'name': 'Donut', 'category': 'Pastries', 'price': 50, 'cost': 15},
+        {'name': 'Muffin', 'category': 'Pastries', 'price': 90, 'cost': 28},
+        {'name': 'Sandwich', 'category': 'Food', 'price': 150, 'cost': 50},
+        {'name': 'Quiche', 'category': 'Food', 'price': 120, 'cost': 40},
+        
+        # Desserts
+        {'name': 'Cheesecake', 'category': 'Desserts', 'price': 140, 'cost': 45},
+        {'name': 'Chocolate Cake', 'category': 'Desserts', 'price': 120, 'cost': 40},
+        {'name': 'Ice Cream', 'category': 'Desserts', 'price': 100, 'cost': 30},
+    ]
+    
+    for product in default_products:
+        # Check if product already exists
+        cursor.execute("SELECT id FROM products WHERE name = ?", (product['name'],))
+        if cursor.fetchone():
+            continue  # Product already exists, skip
+        
+        # Create product
+        cursor.execute(
+            """INSERT INTO products (name, category, price, cost, is_active)
+               VALUES (?, ?, ?, ?, 1)""",
+            (product['name'], product['category'], product['price'], product['cost']),
+        )
+
+
 def init_database(db_path: Optional[str] = None) -> bool:
     """
     Initialize database by creating all required tables if they don't exist.
@@ -285,6 +342,9 @@ def init_database(db_path: Optional[str] = None) -> bool:
         
         # Seed default users if they don't exist
         _seed_default_users(cursor)
+        
+        # Seed default products if they don't exist
+        _seed_default_products(cursor)
         
         conn.commit()
         conn.close()

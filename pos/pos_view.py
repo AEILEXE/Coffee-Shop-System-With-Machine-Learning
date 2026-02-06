@@ -67,6 +67,10 @@ class POSView:
         self.order_name = ""
         self.payment_method = "Cash"
 
+        # Products
+        self.products = []  # List of product dicts
+        self.categories = ["All"]  # Available categories
+
         # Build POS interface
         self._build_ui()
 
@@ -77,22 +81,229 @@ class POSView:
         else:
             main_frame = tk.Frame(self.parent, bg=COLOR_PRIMARY_BG)
         main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-        main_frame.grid_columnconfigure(1, weight=1)
+        main_frame.grid_columnconfigure(0, weight=1)
+        main_frame.grid_columnconfigure(1, weight=0)
+        main_frame.grid_columnconfigure(2, weight=0)
         main_frame.grid_rowconfigure(0, weight=1)
 
-        # Left side - Order items
+        # Left side - Product selection
+        self._build_products_section(main_frame)
+
+        # Middle - Order/Cart
         self._build_order_section(main_frame)
 
         # Right side - Payment & Total
         self._build_payment_section(main_frame)
 
+    def _build_products_section(self, parent):
+        """Build left side with product selection."""
+        if CTK_AVAILABLE:
+            products_frame = ctk.CTkFrame(parent, fg_color=COLOR_SECONDARY_BG, corner_radius=10)
+        else:
+            products_frame = tk.Frame(parent, bg=COLOR_SECONDARY_BG)
+        products_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        products_frame.grid_rowconfigure(2, weight=1)
+
+        # Header
+        if CTK_AVAILABLE:
+            header = ctk.CTkLabel(
+                products_frame,
+                text="Products",
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color=COLOR_ACCENT,
+            )
+        else:
+            header = tk.Label(
+                products_frame,
+                text="Products",
+                font=("Georgia", 16, "bold"),
+                fg=COLOR_ACCENT,
+                bg=COLOR_SECONDARY_BG,
+            )
+        header.pack(padx=10, pady=(10, 5))
+
+        # Category filter
+        if CTK_AVAILABLE:
+            cat_lbl = ctk.CTkLabel(
+                products_frame,
+                text="Category:",
+                font=ctk.CTkFont(size=11),
+                text_color=COLOR_TEXT_PRIMARY,
+            )
+        else:
+            cat_lbl = tk.Label(
+                products_frame,
+                text="Category:",
+                font=("Sans", 11),
+                fg=COLOR_TEXT_PRIMARY,
+                bg=COLOR_SECONDARY_BG,
+            )
+        cat_lbl.pack(padx=10, pady=(5, 0), anchor="w")
+
+        if CTK_AVAILABLE:
+            self.category_var = ctk.StringVar(value="All")
+            self.category_combo = ctk.CTkComboBox(
+                products_frame,
+                values=["All"],
+                variable=self.category_var,
+                command=self._on_category_changed,
+                width=200,
+            )
+        else:
+            self.category_var = tk.StringVar(value="All")
+            self.category_combo = tk.OptionMenu(
+                products_frame,
+                self.category_var,
+                "All",
+                command=self._on_category_changed,
+            )
+        self.category_combo.pack(padx=10, pady=(0, 10), fill="x")
+
+        # Products tree
+        if CTK_AVAILABLE:
+            tree_frame = ctk.CTkFrame(products_frame, fg_color="transparent")
+        else:
+            tree_frame = tk.Frame(products_frame, bg=COLOR_SECONDARY_BG)
+        tree_frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        # Product columns: Name, Price, Add button
+        cols = ("Product", "Price", "Add")
+        self.products_tree = ttk.Treeview(
+            tree_frame,
+            columns=cols,
+            show="headings",
+            height=15,
+        )
+
+        self.products_tree.heading("Product", text="Product")
+        self.products_tree.heading("Price", text="Price")
+        self.products_tree.heading("Add", text="+")
+
+        self.products_tree.column("Product", width=140)
+        self.products_tree.column("Price", width=60)
+        self.products_tree.column("Add", width=35, anchor="center")
+
+        self.products_tree.pack(fill="both", expand=True)
+        self.products_tree.bind("<Button-1>", self._on_product_click)
+
+        # Quantity input
+        if CTK_AVAILABLE:
+            qty_lbl = ctk.CTkLabel(
+                products_frame,
+                text="Qty:",
+                font=ctk.CTkFont(size=11),
+                text_color=COLOR_TEXT_PRIMARY,
+            )
+        else:
+            qty_lbl = tk.Label(
+                products_frame,
+                text="Qty:",
+                font=("Sans", 11),
+                fg=COLOR_TEXT_PRIMARY,
+                bg=COLOR_SECONDARY_BG,
+            )
+        qty_lbl.pack(padx=10, pady=(10, 0), anchor="w")
+
+        if CTK_AVAILABLE:
+            self.quantity_entry = ctk.CTkEntry(products_frame, width=200)
+            self.quantity_entry.insert(0, "1")
+        else:
+            self.quantity_entry = tk.Entry(products_frame, width=25)
+            self.quantity_entry.insert(0, "1")
+        self.quantity_entry.pack(padx=10, pady=(0, 10), fill="x")
+
+    def _on_product_click(self, event):
+        """Handle product button click."""
+        item = self.products_tree.selection()
+        if not item:
+            return
+
+        col = self.products_tree.identify("column", event.x, event.y)
+        if col == "#3":  # Add column
+            # Get selected product
+            values = self.products_tree.item(item[0])["values"]
+            product_name = values[0]
+            price_str = values[1].replace("₱", "").strip()
+            
+            try:
+                price = float(price_str)
+                # Get quantity
+                qty_str = self.quantity_entry.get().strip()
+                qty = int(qty_str) if qty_str else 1
+                
+                # Find product ID from tree
+                product_id = self.products_tree.item(item[0])["text"]
+                
+                # Add to cart
+                self.add_item_to_cart(int(product_id), product_name, price, qty)
+                
+                # Reset quantity
+                self.quantity_entry.delete(0, "end")
+                self.quantity_entry.insert(0, "1")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to add item: {e}")
+
+    def _on_category_changed(self, choice):
+        """Handle category selection change."""
+        self._refresh_products_display()
+
+    def populate_products(self, products: List[Dict], categories: List[str]):
+        """
+        Populate product list from service.
+
+        Args:
+            products: List of product dicts.
+            categories: List of category names.
+        """
+        self.products = products
+        self.categories = ["All"] + categories
+
+        # Update category combo
+        if CTK_AVAILABLE:
+            self.category_combo.configure(values=self.categories)
+        else:
+            # For tkinter, we need to recreate the menu
+            menu = self.category_combo["menu"]
+            menu.delete(0, "end")
+            for cat in self.categories:
+                menu.add_command(
+                    label=cat,
+                    command=lambda c=cat: (self.category_var.set(c), self._on_category_changed(c)),
+                )
+
+        self._refresh_products_display()
+
+    def _refresh_products_display(self):
+        """Refresh the products tree display."""
+        # Clear tree
+        for item in self.products_tree.get_children():
+            self.products_tree.delete(item)
+
+        # Get selected category
+        selected_cat = self.category_var.get()
+
+        # Filter products
+        filtered = self.products
+        if selected_cat != "All":
+            filtered = [p for p in self.products if p.get("category") == selected_cat]
+
+        # Add items to tree
+        for idx, product in enumerate(filtered):
+            values = (
+                product["name"],
+                f"₱ {product['price']:.2f}",
+                "Add",
+            )
+            self.products_tree.insert("", "end", iid=str(product["id"]), values=values)
+
     def _build_order_section(self, parent):
-        """Build left side with order items and controls."""
+        """Build middle section with order items and controls."""
         if CTK_AVAILABLE:
             left_frame = ctk.CTkFrame(parent, fg_color="transparent")
         else:
             left_frame = tk.Frame(parent, bg=COLOR_PRIMARY_BG)
-        left_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        left_frame.grid(row=0, column=1, sticky="nsew", padx=10)
         left_frame.grid_rowconfigure(2, weight=1)
 
         # Header
@@ -230,7 +441,7 @@ class POSView:
             right_frame = ctk.CTkFrame(parent, fg_color="transparent")
         else:
             right_frame = tk.Frame(parent, bg=COLOR_PRIMARY_BG)
-        right_frame.grid(row=0, column=1, sticky="nsew")
+        right_frame.grid(row=0, column=2, sticky="nsew")
         right_frame.grid_rowconfigure(3, weight=1)
 
         # Header

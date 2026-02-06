@@ -303,15 +303,16 @@ class LoginScreen:
         user = verify_user(username, password)
 
         if user:
-            # Login successful
+            # Login successful — `verify_user` returns a dict, not a tuple
             user_dict = {
-                "id": user[0],
-                "name": user[1],
-                "role": user[2],
-                "can_pos": user[3],
-                "can_inventory": user[4],
-                "can_reports": user[5],
-                "can_user_management": user[6],
+                "id": user.get("id"),
+                "username": user.get("username"),
+                "name": user.get("name"),
+                "role": user.get("role"),
+                "can_pos": user.get("can_pos", 0),
+                "can_inventory": user.get("can_inventory", 0),
+                "can_reports": user.get("can_reports", 0),
+                "can_user_management": user.get("can_user_management", 0),
             }
 
             # Invoke callback

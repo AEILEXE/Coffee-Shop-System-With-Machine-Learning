@@ -221,7 +221,8 @@ class Dashboard:
     def _show_login(self):
         """Show login screen."""
         self._clear_content()
-        LoginScreen(self.root, on_login_success=self._on_login_success)
+        # Render the login UI inside the content area so header/sidebar persist
+        LoginScreen(self.content_frame, on_login_success=self._on_login_success)
 
     def _on_login_success(self, user_dict):
         """Called when login is successful."""
@@ -229,6 +230,26 @@ class Dashboard:
         self._update_header()
         self._build_sidebar_buttons()
         self._show_default_module()
+
+    def _show_default_module(self):
+        """Load the default module after successful login.
+
+        Chooses the first accessible module for the user's role, or shows
+        a placeholder if none are available.
+        """
+        if not self.current_user:
+            return
+
+        modules = get_accessible_sidebar_modules(self.current_user.get("role", ""))
+        if modules:
+            # Load the first accessible module
+            default_key = modules[0].get("key")
+            if default_key:
+                self._load_module(default_key)
+                return
+
+        # Fallback placeholder
+        self._show_placeholder("Home")
 
     def _update_header(self):
         """Update header with current user info."""
@@ -305,38 +326,133 @@ class Dashboard:
 
     def _load_pos_module(self):
         """Load POS module."""
-        self._show_placeholder("POS")
-        # TODO: Load actual POS module here
-        # from ui.pos import POSModule
-        # POSModule(self.content_frame, self.current_user)
+        try:
+            from pos.pos_manager import POSManager
+            self.pos_manager = POSManager(
+                self.content_frame,
+                self.current_user,
+                on_transaction_complete=self._on_pos_transaction_complete,
+            )
+        except Exception as e:
+            self._show_placeholder("POS")
+            from tkinter import messagebox
+            messagebox.showerror("Error", f"Failed to load POS module: {e}")
 
     def _load_inventory_module(self):
         """Load Inventory module."""
-        self._show_placeholder("Inventory")
-        # TODO: Load actual Inventory module here
-        # from ui.inventory import InventoryModule
-        # InventoryModule(self.content_frame, self.current_user)
+        try:
+            from inventory.inventory_manager import InventoryManager
+            self.inventory_manager = InventoryManager(
+                self.content_frame,
+                self.current_user,
+                on_stock_update=self._on_inventory_update,
+            )
+        except Exception as e:
+            self._show_placeholder("Inventory")
+            from tkinter import messagebox
+            messagebox.showerror("Error", f"Failed to load Inventory module: {e}")
 
     def _load_reports_module(self):
         """Load Reports module."""
-        self._show_placeholder("Reports")
-        # TODO: Load actual Reports module here
-        # from ui.reports import ReportsModule
-        # ReportsModule(self.content_frame, self.current_user)
+        try:
+            from reports.reports_manager import ReportsManager
+            self.reports_manager = ReportsManager(
+                self.content_frame,
+                self.current_user,
+            )
+        except Exception as e:
+            self._show_placeholder("Reports")
+            from tkinter import messagebox
+            messagebox.showerror("Error", f"Failed to load Reports module: {e}")
 
     def _load_user_management_module(self):
         """Load User Management module."""
         if not require_admin(self.current_user["role"]):
+            from tkinter import messagebox
             messagebox.showerror(
                 "Unauthorized",
                 "You do not have permission to manage users.",
             )
             return
 
-        self._show_placeholder("User Management")
-        # TODO: Load actual User Management module here
-        # from ui.user_management import UserManagementModule
-        # UserManagementModule(self.content_frame, self.current_user)
+        try:
+            from auth.user_management_service import UserManagementService
+            service = UserManagementService()
+            users = service.get_all_users()
+            
+            # Simple placeholder for now - shows user list
+            if CTK_AVAILABLE:
+                import customtkinter as ctk
+                from tkinter import ttk
+                
+                frame = ctk.CTkFrame(self.content_frame, fg_color=COLOR_PRIMARY_BG)
+                frame.pack(fill="both", expand=True, padx=10, pady=10)
+                
+                title = ctk.CTkLabel(
+                    frame,
+                    text="User Management",
+                    font=ctk.CTkFont(size=24, weight="bold"),
+                    text_color=COLOR_ACCENT,
+                )
+                title.pack(pady=20)
+                
+                # Users table
+                tree_frame = ctk.CTkFrame(frame, fg_color="transparent")
+                tree_frame.pack(fill="both", expand=True, padx=10, pady=10)
+                
+                cols = ("Username", "Full Name", "Role", "Active")
+                tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=15)
+                tree.heading("Username", text="Username")
+                tree.heading("Full Name", text="Full Name")
+                tree.heading("Role", text="Role")
+                tree.heading("Active", text="Active")
+                
+                tree.column("Username", width=120)
+                tree.column("Full Name", width=150)
+                tree.column("Role", width=100)
+                tree.column("Active", width=60)
+                
+                for user in users:
+                    active_text = "Yes" if user["is_active"] else "No"
+                    tree.insert("", "end", values=(
+                        user["username"],
+                        user["full_name"],
+                        user["role"],
+                        active_text,
+                    ))
+                
+                tree.pack(fill="both", expand=True)
+        except Exception as e:
+            self._show_placeholder("User Management")
+            from tkinter import messagebox
+            messagebox.showerror("Error", f"Failed to load User Management: {e}")
+
+    def _on_pos_transaction_complete(self, transaction_result):
+        """Handle completed POS transaction."""
+        try:
+            # Log with inventory if needed
+            if hasattr(self, 'inventory_manager'):
+                for item in transaction_result['transaction_data']['items']:
+                    self.inventory_manager.service.deduct_stock_for_sale(
+                        product_id=item['id'],
+                        quantity=item['quantity'],
+                    )
+            
+            # Refresh reports if open
+            if hasattr(self, 'reports_manager'):
+                self.reports_manager.refresh()
+                
+        except Exception as e:
+            print(f"Error processing transaction: {e}")
+
+    def _on_inventory_update(self, inventory_data):
+        """Handle inventory update."""
+        try:
+            # Refresh reports if open
+            if hasattr(self, 'reports_manager'):
+                self.reports_manager.refresh()
+        except Exception as e:
+            print(f"Error updating reports: {e}")
 
     def _show_placeholder(self, module_name: str):
         """Show a placeholder for a module."""
