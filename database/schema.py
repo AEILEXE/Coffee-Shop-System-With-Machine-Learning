@@ -4,6 +4,7 @@ from .db import get_connection
 from utils.security import verify_password
 
 
+
 CREATE_SCHEMA_VERSION_TABLE = """
 CREATE TABLE IF NOT EXISTS schema_version (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -94,11 +95,8 @@ CREATE TABLE IF NOT EXISTS orders (
     order_number TEXT UNIQUE NOT NULL,
     user_id INTEGER NOT NULL,
     total_amount REAL NOT NULL,
-    status TEXT CHECK(status IN ('draft','pending','completed','cancelled','voided')) DEFAULT 'draft',
+    status TEXT DEFAULT 'draft',
     payment_method TEXT,
-    reference TEXT,
-    discount_percent REAL DEFAULT 0,
-    order_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP,
     void_reason TEXT,
@@ -294,17 +292,6 @@ def _apply_migrations(cursor) -> None:
 
         _set_schema_version(cursor, 2)
 
-    if version < 3:
-        if _table_exists(cursor, "orders"):
-            if not _column_exists(cursor, "orders", "reference"):
-                cursor.execute("ALTER TABLE orders ADD COLUMN reference TEXT")
-            if not _column_exists(cursor, "orders", "discount_percent"):
-                cursor.execute("ALTER TABLE orders ADD COLUMN discount_percent REAL DEFAULT 0")
-            if not _column_exists(cursor, "orders", "order_name"):
-                cursor.execute("ALTER TABLE orders ADD COLUMN order_name TEXT")
-
-        _set_schema_version(cursor, 3)
-
 
 def _create_indexes(cursor) -> None:
     indexes = [
@@ -323,7 +310,6 @@ def _create_indexes(cursor) -> None:
         "CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)",
         "CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)",
-        "CREATE INDEX IF NOT EXISTS idx_orders_voided_at ON orders(voided_at)",
         "CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)",
         "CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id)",
         "CREATE INDEX IF NOT EXISTS idx_custom_drinks_base_product_id ON custom_drinks(base_product_id)",
@@ -386,8 +372,6 @@ def _seed_default_users(cursor) -> None:
         row = cursor.execute("SELECT id FROM users WHERE username = ?", (user["username"],)).fetchone()
         if row:
             continue
-
-        password_hash = hash_password(user["password"])
         cursor.execute(
             """
             INSERT INTO users
@@ -396,7 +380,7 @@ def _seed_default_users(cursor) -> None:
             """,
             (
                 user["username"],
-                password_hash,
+                hash_password(user["password"]),
                 user["full_name"],
                 user["role"],
                 user["can_pos"],
@@ -537,7 +521,7 @@ def get_table_info(db_path: Optional[str] = None) -> dict:
         raise Exception(f"Failed to get table info: {e}")
 
 
-def verify_user(username: str, password: str) -> Dict[str, Any] | None:
+def verify_user(username: str, password: str) -> Optional[Dict[str, Any]]:
     try:
         conn = get_connection()
         cursor = conn.cursor()
@@ -570,5 +554,6 @@ def verify_user(username: str, password: str) -> Dict[str, Any] | None:
             "can_reports": user_row["can_reports"],
             "can_user_management": user_row["can_user_management"],
         }
+
     except Exception as e:
         raise Exception(f"Error verifying user: {e}")
