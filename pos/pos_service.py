@@ -1,62 +1,29 @@
-"""
-CAFÉCRAFT POS SERVICE LAYER
-
-Responsibilities:
-- Fetch products from database for POS
-- Create orders and order items
-- Update inventory after sales
-- Retrieve transaction history
-- Calculate totals and discounts
-- Log transactions
-
-Business logic separated from UI.
-"""
-
-from database.db import get_db_connection, DatabaseConnection
-from database.schema import (
-    CREATE_ORDERS_TABLE,
-    CREATE_ORDER_ITEMS_TABLE,
-    CREATE_TRANSACTIONS_TABLE,
-)
-from typing import List, Dict, Optional, Tuple
 from datetime import datetime
+from typing import Dict, List, Optional
 import sqlite3
+
+from database.db import get_db_connection
+from inventory.recipe_inventory import InventoryService
 
 
 class POSService:
-    """Handle POS business logic and database operations."""
-
     def __init__(self, db_path: str = None):
-        """Initialize POS service."""
         self.db_path = db_path
 
     def add_product(self, name: str, category: str, price: float, cost: float, description: str = "") -> bool:
-        """
-        Add a new product to the database.
-        """
         query = """
             INSERT INTO products (name, category, price, cost, description, is_active)
             VALUES (?, ?, ?, ?, ?, 1)
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    db.execute(query, (name, category, price, cost, description), commit=True)
-            else:
-                with get_db_connection() as db:
-                    db.execute(query, (name, category, price, cost, description), commit=True)
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                db.execute(query, (name, category, price, cost, description), commit=True)
             return True
         except Exception as e:
             print(f"Error adding product: {e}")
             return False
 
     def get_all_products(self) -> List[Dict]:
-        """
-        Fetch all active products from database.
-
-        Returns:
-            List of product dicts with id, name, price, category.
-        """
         query = """
             SELECT id, name, category, price, description, image_path
             FROM products
@@ -64,12 +31,8 @@ class POSService:
             ORDER BY category, name
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    rows = db.execute_fetch_all(query)
-            else:
-                with get_db_connection() as db:
-                    rows = db.execute_fetch_all(query)
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                rows = db.execute_fetch_all(query)
             return [
                 {
                     "id": row[0],
@@ -86,15 +49,6 @@ class POSService:
             return []
 
     def get_products_by_category(self, category: str) -> List[Dict]:
-        """
-        Fetch products by category.
-
-        Args:
-            category: Product category.
-
-        Returns:
-            List of product dicts.
-        """
         query = """
             SELECT id, name, category, price, description, image_path
             FROM products
@@ -102,71 +56,48 @@ class POSService:
             ORDER BY name
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    rows = db.execute_fetch_all(query, (category,))
-            else:
-                with get_db_connection() as db:
-                    rows = db.execute_fetch_all(query, (category,))
-                return [
-                    {
-                        "id": row[0],
-                        "name": row[1],
-                        "category": row[2],
-                        "price": row[3],
-                        "description": row[4],
-                        "image_path": row[5],
-                    }
-                    for row in rows
-                ]
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                rows = db.execute_fetch_all(query, (category,))
+            return [
+                {
+                    "id": row[0],
+                    "name": row[1],
+                    "category": row[2],
+                    "price": row[3],
+                    "description": row[4],
+                    "image_path": row[5],
+                }
+                for row in rows
+            ]
         except Exception as e:
             print(f"Error fetching products by category: {e}")
             return []
 
     def get_product(self, product_id: int) -> Optional[Dict]:
-        """
-        Fetch a single product.
-
-        Args:
-            product_id: Product ID.
-
-        Returns:
-            Product dict or None.
-        """
         query = """
             SELECT id, name, category, price, cost, description, image_path
             FROM products
             WHERE id = ? AND is_active = 1
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    row = db.execute_fetch_one(query, (product_id,))
-            else:
-                with get_db_connection() as db:
-                    row = db.execute_fetch_one(query, (product_id,))
-                if row:
-                    return {
-                        "id": row[0],
-                        "name": row[1],
-                        "category": row[2],
-                        "price": row[3],
-                        "cost": row[4],
-                        "description": row[5],
-                        "image_path": row[6],
-                    }
-                return None
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                row = db.execute_fetch_one(query, (product_id,))
+            if row:
+                return {
+                    "id": row[0],
+                    "name": row[1],
+                    "category": row[2],
+                    "price": row[3],
+                    "cost": row[4],
+                    "description": row[5],
+                    "image_path": row[6],
+                }
+            return None
         except Exception as e:
             print(f"Error fetching product {product_id}: {e}")
             return None
 
     def get_categories(self) -> List[str]:
-        """
-        Get all product categories.
-
-        Returns:
-            List of category names.
-        """
         query = """
             SELECT DISTINCT category
             FROM products
@@ -174,13 +105,9 @@ class POSService:
             ORDER BY category
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    rows = db.execute_fetch_all(query)
-            else:
-                with get_db_connection() as db:
-                    rows = db.execute_fetch_all(query)
-                return [row[0] for row in rows if row[0]]
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                rows = db.execute_fetch_all(query)
+            return [row[0] for row in rows if row[0]]
         except Exception as e:
             print(f"Error fetching categories: {e}")
             return []
@@ -195,77 +122,87 @@ class POSService:
         order_name: str = "",
         reference: Optional[str] = None,
     ) -> Optional[int]:
-        """
-        Create an order and order items in the database.
+        if not items:
+            return None
 
-        Args:
-            user_id: User ID (cashier).
-            items: List of cart items with id, price, quantity.
-            total_amount: Final total after discount.
-            payment_method: Payment method (Cash, GCash, Bank Transfer).
-            discount_percent: Discount percentage applied.
-            order_name: Order name/customer identifier.
-            reference: Bank reference if applicable.
-
-        Returns:
-            Order ID or None on failure.
-        """
-        # Generate unique order number
         order_number = f"ORD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
         try:
-            if self.db_path:
-                db_connection = get_db_connection(self.db_path)
-            else:
-                db_connection = get_db_connection()
-                
-            with db_connection as db:
+            db_cm = get_db_connection(self.db_path) if self.db_path else get_db_connection()
+            with db_cm as db:
+                if hasattr(db, "begin_immediate"):
+                    db.begin_immediate()
+
                 cursor = db.get_cursor()
 
-                # Create order
                 cursor.execute(
                     """
-                    INSERT INTO orders (order_number, user_id, total_amount, payment_method, status)
-                    VALUES (?, ?, ?, ?, 'completed')
+                    INSERT INTO orders (order_number, user_id, total_amount, payment_method, status, completed_at)
+                    VALUES (?, ?, ?, ?, 'completed', CURRENT_TIMESTAMP)
                     """,
-                    (order_number, user_id, total_amount, payment_method),
+                    (order_number, user_id, float(total_amount), payment_method),
                 )
                 order_id = cursor.lastrowid
 
-                # Create order items
+                inv = InventoryService(self.db_path)
+
+                cart_for_deduction = [
+                    {"product_id": int(item["id"]), "quantity": int(item["quantity"])}
+                    for item in items
+                ]
+
+                inv.deduct_ingredients_for_sale(
+                    cursor=cursor,
+                    cart_items=cart_for_deduction,
+                    order_id=order_id,
+                    performed_by=user_id,
+                    strict_recipes=True,
+                    log_legacy_transactions=True,
+                )
+
+                notes_parts = [f"Order {order_number}"]
+                if order_name:
+                    notes_parts.append(order_name)
+                if reference:
+                    notes_parts.append(f"Ref:{reference}")
+                if discount_percent:
+                    notes_parts.append(f"Disc:{float(discount_percent):.2f}%")
+                notes = " - ".join(notes_parts)
+
                 for item in items:
+                    pid = int(item["id"])
+                    qty = int(item["quantity"])
+                    price = float(item["price"])
+                    subtotal = float(qty * price)
+
                     cursor.execute(
                         """
                         INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal)
                         VALUES (?, ?, ?, ?, ?)
                         """,
-                        (
-                            order_id,
-                            item["id"],
-                            item["quantity"],
-                            item["price"],
-                            item["quantity"] * item["price"],
-                        ),
+                        (order_id, pid, qty, price, subtotal),
                     )
 
-                    # Log transaction
                     cursor.execute(
                         """
                         INSERT INTO transactions (type, product_id, quantity, unit_price, total_amount, user_id, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        VALUES ('sale', ?, ?, ?, ?, ?, ?)
                         """,
-                        (
-                            "sale",
-                            item["id"],
-                            item["quantity"],
-                            item["price"],
-                            item["quantity"] * item["price"],
-                            user_id,
-                            f"Order {order_number} - {order_name}" if order_name else f"Order {order_number}",
-                        ),
+                        (pid, qty, price, subtotal, user_id, notes),
                     )
 
-                db.commit()
+                cursor.execute(
+                    """
+                    INSERT INTO audit_log (user_id, action, table_name, record_id, old_value, new_value)
+                    VALUES (?, 'CREATE_ORDER', 'orders', ?, NULL, ?)
+                    """,
+                    (
+                        user_id,
+                        order_id,
+                        f"order_number={order_number}; total={float(total_amount):.2f}; payment={payment_method}",
+                    ),
+                )
+
                 return order_id
 
         except Exception as e:
@@ -273,23 +210,9 @@ class POSService:
             return None
 
     def get_order_details(self, order_id: int) -> Optional[Dict]:
-        """
-        Get complete order details including items.
-
-        Args:
-            order_id: Order ID.
-
-        Returns:
-            Order dict with items or None.
-        """
         try:
-            if self.db_path:
-                db_connection = get_db_connection(self.db_path)
-            else:
-                db_connection = get_db_connection()
-                
-            with db_connection as db:
-                # Get order
+            db_cm = get_db_connection(self.db_path) if self.db_path else get_db_connection()
+            with db_cm as db:
                 order_row = db.execute_fetch_one(
                     """
                     SELECT id, order_number, user_id, total_amount, payment_method, created_at, status
@@ -313,7 +236,6 @@ class POSService:
                     "items": [],
                 }
 
-                # Get order items
                 items_rows = db.execute_fetch_all(
                     """
                     SELECT oi.id, oi.product_id, p.name, oi.quantity, oi.unit_price, oi.subtotal
@@ -325,14 +247,16 @@ class POSService:
                 )
 
                 for item_row in items_rows:
-                    order["items"].append({
-                        "id": item_row[0],
-                        "product_id": item_row[1],
-                        "name": item_row[2],
-                        "quantity": item_row[3],
-                        "unit_price": item_row[4],
-                        "subtotal": item_row[5],
-                    })
+                    order["items"].append(
+                        {
+                            "id": item_row[0],
+                            "product_id": item_row[1],
+                            "name": item_row[2],
+                            "quantity": item_row[3],
+                            "unit_price": item_row[4],
+                            "subtotal": item_row[5],
+                        }
+                    )
 
                 return order
 
@@ -341,15 +265,6 @@ class POSService:
             return None
 
     def get_recent_orders(self, limit: int = 10) -> List[Dict]:
-        """
-        Get recent orders.
-
-        Args:
-            limit: Number of orders to fetch.
-
-        Returns:
-            List of order dicts.
-        """
         query = """
             SELECT id, order_number, user_id, total_amount, payment_method, created_at, status
             FROM orders
@@ -357,38 +272,25 @@ class POSService:
             LIMIT ?
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    rows = db.execute_fetch_all(query, (limit,))
-            else:
-                with get_db_connection() as db:
-                    rows = db.execute_fetch_all(query, (limit,))
-                return [
-                    {
-                        "id": row[0],
-                        "order_number": row[1],
-                        "user_id": row[2],
-                        "total_amount": row[3],
-                        "payment_method": row[4],
-                        "created_at": row[5],
-                        "status": row[6],
-                    }
-                    for row in rows
-                ]
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                rows = db.execute_fetch_all(query, (limit,))
+            return [
+                {
+                    "id": row[0],
+                    "order_number": row[1],
+                    "user_id": row[2],
+                    "total_amount": row[3],
+                    "payment_method": row[4],
+                    "created_at": row[5],
+                    "status": row[6],
+                }
+                for row in rows
+            ]
         except Exception as e:
             print(f"Error fetching recent orders: {e}")
             return []
 
     def get_daily_sales(self, date: str = None) -> Dict:
-        """
-        Get daily sales summary.
-
-        Args:
-            date: Date in YYYY-MM-DD format (default today).
-
-        Returns:
-            Dict with total sales, count, etc.
-        """
         if not date:
             date = datetime.now().strftime("%Y-%m-%d")
 
@@ -398,43 +300,25 @@ class POSService:
             WHERE DATE(created_at) = ? AND status = 'completed'
         """
         try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    row = db.execute_fetch_one(query, (date,))
-            else:
-                with get_db_connection() as db:
-                    row = db.execute_fetch_one(query, (date,))
-                return {
-                    "date": date,
-                    "order_count": row[0] or 0,
-                    "total_sales": row[1] or 0.0,
-                }
+            with get_db_connection(self.db_path) if self.db_path else get_db_connection() as db:
+                row = db.execute_fetch_one(query, (date,))
+            return {
+                "date": date,
+                "order_count": row[0] or 0,
+                "total_sales": row[1] or 0.0,
+            }
         except Exception as e:
             print(f"Error fetching daily sales: {e}")
             return {"date": date, "order_count": 0, "total_sales": 0.0}
 
     def generate_receipt_data(self, order_id: int) -> Optional[Dict]:
-        """
-        Generate receipt data for an order.
-
-        Args:
-            order_id: Order ID.
-
-        Returns:
-            Receipt data dict or None.
-        """
         order = self.get_order_details(order_id)
         if not order:
             return None
 
         try:
-            if self.db_path:
-                db_connection = get_db_connection(self.db_path)
-            else:
-                db_connection = get_db_connection()
-                
-            with db_connection as db:
-                # Get user info
+            db_cm = get_db_connection(self.db_path) if self.db_path else get_db_connection()
+            with db_cm as db:
                 user_row = db.execute_fetch_one(
                     "SELECT full_name FROM users WHERE id = ?",
                     (order["user_id"],),

@@ -1,270 +1,230 @@
-"""
-CAFÉCRAFT INVENTORY SERVICE LAYER
-
-Responsibilities:
-- Manage ingredient and product inventory
-- Track stock levels and reorder thresholds
-- Log inventory transactions
-- Integration with POS for stock depletion
-- Low-stock alerts
-"""
-
-from database.db import get_db_connection
-from typing import List, Dict, Optional
-from datetime import datetime
+import sqlite3
+from typing import Dict, List, Tuple, Optional
 
 
 class InventoryService:
-    """Handle inventory operations and database interactions."""
-
-    def __init__(self, db_path: str = None):
-        """Initialize inventory service."""
+    def __init__(self, db_path: Optional[str] = None):
         self.db_path = db_path
 
-    def get_all_ingredients(self) -> List[Dict]:
-        """
-        Fetch all ingredients with current stock levels.
-
-        Returns:
-            List of ingredient dicts with stock info.
-        """
-        query = """
-            SELECT 
-                i.id, i.name, i.unit, i.cost_per_unit, i.reorder_level,
-                inv.quantity, inv.last_restocked, inv.expiry_date, inv.supplier
-            FROM ingredients i
-            LEFT JOIN inventory inv ON i.id = inv.ingredient_id
-            WHERE i.is_active = 1
-            ORDER BY i.name
-        """
-        try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    rows = db.execute_fetch_all(query)
-            else:
-                with get_db_connection() as db:
-                    rows = db.execute_fetch_all(query)
-
-            return [
-                {
-                    "id": row[0],
-                    "name": row[1],
-                    "unit": row[2],
-                    "cost_per_unit": row[3],
-                    "reorder_level": row[4],
-                    "quantity": row[5] or 0,
-                    "last_restocked": row[6],
-                    "expiry_date": row[7],
-                    "supplier": row[8],
-                    "is_low_stock": (row[5] or 0) < (row[4] or 10),
-                }
-                for row in rows
-            ]
-        except Exception as e:
-            print(f"Error fetching ingredients: {e}")
-            return []
-
-    def update_stock(
+    def compute_required_ingredients(
         self,
-        ingredient_id: int,
-        quantity: float,
-        notes: str = "",
-    ) -> bool:
-        """
-        Update ingredient stock level.
+        cursor: sqlite3.Cursor,
+        cart_items: List[Dict],
+        strict_recipes: bool = True,
+    ) -> Tuple[Dict[int, Dict], List[str]]:
+        required: Dict[int, Dict] = {}
+        errors: List[str] = []
 
-        Args:
-            ingredient_id: Ingredient ID.
-            quantity: New quantity (absolute value, not delta).
-            notes: Transaction notes.
+        if not cart_items:
+            return required, errors
 
-        Returns:
-            True if successful, False otherwise.
-        """
-        try:
-            if self.db_path:
-                db_connection = get_db_connection(self.db_path)
-            else:
-                db_connection = get_db_connection()
+        product_ids = [int(i["product_id"]) for i in cart_items]
+        placeholders = ",".join(["?"] * len(product_ids))
 
-            with db_connection as db:
-                cursor = db.get_cursor()
+        products = cursor.execute(
+            f"SELECT id, name, is_active FROM products WHERE id IN ({placeholders})",
+            tuple(product_ids),
+        ).fetchall()
+        product_map = {int(r["id"]): {"name": r["name"], "is_active": int(r["is_active"])} for r in products}
 
-                # Get current quantity
-                cursor.execute(
-                    "SELECT quantity FROM inventory WHERE ingredient_id = ?",
+        for li in cart_items:
+            product_id = int(li["product_id"])
+            qty_sold = int(li.get("quantity", 0) or 0)
+
+            if qty_sold <= 0:
+                continue
+
+            p = product_map.get(product_id)
+            if not p or p["is_active"] != 1:
+                errors.append(f"Invalid/inactive product: {product_id}")
+                continue
+
+            recipe_row = cursor.execute(
+                "SELECT id FROM recipes WHERE product_id = ?",
+                (product_id,),
+            ).fetchone()
+
+            if not recipe_row:
+                if strict_recipes:
+                    errors.append(f"Missing recipe for product: {p['name']}")
+                continue
+
+            recipe_id = int(recipe_row["id"])
+            recipe_items = cursor.execute(
+                """
+                SELECT ingredient_id, qty, unit, COALESCE(wastage_factor, 0) AS wastage_factor
+                FROM recipe_items
+                WHERE recipe_id = ?
+                """,
+                (recipe_id,),
+            ).fetchall()
+
+            if not recipe_items:
+                if strict_recipes:
+                    errors.append(f"Recipe has no items for product: {p['name']}")
+                continue
+
+            for ri in recipe_items:
+                ingredient_id = int(ri["ingredient_id"])
+                unit = ri["unit"]
+                base_qty = float(ri["qty"])
+                wastage = float(ri["wastage_factor"] or 0.0)
+
+                needed = base_qty * qty_sold * (1.0 + wastage)
+
+                if ingredient_id not in required:
+                    required[ingredient_id] = {"qty": 0.0, "unit": unit}
+                else:
+                    if required[ingredient_id]["unit"] != unit:
+                        errors.append(f"Unit mismatch in recipes for ingredient_id={ingredient_id}")
+
+                required[ingredient_id]["qty"] += needed
+
+        return required, errors
+
+    def validate_inventory(
+        self,
+        cursor: sqlite3.Cursor,
+        required: Dict[int, Dict],
+    ) -> List[Dict]:
+        shortages: List[Dict] = []
+
+        for ingredient_id, req in required.items():
+            needed = float(req["qty"])
+            unit = req["unit"]
+
+            row = cursor.execute(
+                "SELECT COALESCE(SUM(quantity), 0) AS qty FROM inventory WHERE ingredient_id = ?",
+                (ingredient_id,),
+            ).fetchone()
+
+            available = float(row["qty"]) if row else 0.0
+
+            if available + 1e-9 < needed:
+                name_row = cursor.execute(
+                    "SELECT name FROM ingredients WHERE id = ?",
                     (ingredient_id,),
-                )
-                result = cursor.fetchone()
-                old_quantity = result[0] if result else 0
+                ).fetchone()
+                name = name_row["name"] if name_row else f"ingredient_id={ingredient_id}"
 
-                # Update inventory
-                if result:
-                    cursor.execute(
-                        """UPDATE inventory 
-                           SET quantity = ?, last_restocked = CURRENT_TIMESTAMP
-                           WHERE ingredient_id = ?""",
-                        (quantity, ingredient_id),
-                    )
+                shortages.append(
+                    {
+                        "ingredient_id": ingredient_id,
+                        "name": name,
+                        "needed": needed,
+                        "available": available,
+                        "short_by": needed - available,
+                        "unit": unit,
+                    }
+                )
+
+        return shortages
+
+    def consume_inventory(
+        self,
+        cursor: sqlite3.Cursor,
+        required: Dict[int, Dict],
+        order_id: int,
+        performed_by: int,
+        log_legacy_transactions: bool = True,
+    ) -> None:
+        for ingredient_id, req in required.items():
+            remaining = float(req["qty"])
+            unit = req["unit"]
+
+            rows = cursor.execute(
+                """
+                SELECT id, quantity
+                FROM inventory
+                WHERE ingredient_id = ?
+                ORDER BY
+                    CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END,
+                    expiry_date ASC,
+                    last_restocked ASC,
+                    id ASC
+                """,
+                (ingredient_id,),
+            ).fetchall()
+
+            for r in rows:
+                if remaining <= 1e-9:
+                    break
+
+                inv_id = int(r["id"])
+                qty = float(r["quantity"])
+
+                if qty <= remaining + 1e-9:
+                    cursor.execute("DELETE FROM inventory WHERE id = ?", (inv_id,))
+                    remaining -= qty
                 else:
                     cursor.execute(
-                        """INSERT INTO inventory (ingredient_id, quantity, last_restocked)
-                           VALUES (?, ?, CURRENT_TIMESTAMP)""",
-                        (ingredient_id, quantity),
+                        "UPDATE inventory SET quantity = ? WHERE id = ?",
+                        (qty - remaining, inv_id),
                     )
+                    remaining = 0.0
 
-                # Log transaction
-                delta = quantity - old_quantity
+            if remaining > 1e-6:
+                raise ValueError(f"Inventory became insufficient during deduction (ingredient_id={ingredient_id}).")
+
+            cursor.execute(
+                """
+                INSERT INTO inventory_movements
+                (ingredient_id, movement_type, qty, unit, ref_type, ref_id, performed_by, reason)
+                VALUES (?, 'consume', ?, ?, 'order', ?, ?, ?)
+                """,
+                (
+                    ingredient_id,
+                    float(req["qty"]),
+                    unit,
+                    order_id,
+                    performed_by,
+                    "Auto-deduct from sale",
+                ),
+            )
+
+            if log_legacy_transactions:
                 cursor.execute(
-                    """INSERT INTO transactions (type, ingredient_id, quantity, unit_price, total_amount, notes)
-                       VALUES (?, ?, ?, 1, ?, ?)""",
-                    ("adjustment", ingredient_id, abs(delta), abs(delta), notes),
+                    """
+                    INSERT INTO transactions
+                    (type, ingredient_id, quantity, unit_price, total_amount, user_id, notes)
+                    VALUES ('sale', ?, ?, 0, 0, ?, ?)
+                    """,
+                    (
+                        ingredient_id,
+                        float(req["qty"]),
+                        performed_by,
+                        f"Auto-deduct (order_id={order_id})",
+                    ),
                 )
 
-                db.commit()
-                return True
-
-        except Exception as e:
-            print(f"Error updating stock: {e}")
-            return False
-
-    def get_low_stock_items(self) -> List[Dict]:
-        """
-        Get items below reorder threshold.
-
-        Returns:
-            List of low-stock ingredient dicts.
-        """
-        query = """
-            SELECT 
-                i.id, i.name, i.unit, i.reorder_level,
-                inv.quantity, i.cost_per_unit
-            FROM ingredients i
-            LEFT JOIN inventory inv ON i.id = inv.ingredient_id
-            WHERE i.is_active = 1 AND (inv.quantity IS NULL OR inv.quantity < i.reorder_level)
-            ORDER BY i.name
-        """
-        try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    rows = db.execute_fetch_all(query)
-            else:
-                with get_db_connection() as db:
-                    rows = db.execute_fetch_all(query)
-
-            return [
-                {
-                    "id": row[0],
-                    "name": row[1],
-                    "unit": row[2],
-                    "reorder_level": row[3],
-                    "current_quantity": row[4] or 0,
-                    "cost_per_unit": row[5],
-                }
-                for row in rows
-            ]
-        except Exception as e:
-            print(f"Error fetching low stock items: {e}")
-            return []
-
-    def get_inventory_value(self) -> Dict:
-        """
-        Calculate total inventory value.
-
-        Returns:
-            Dict with total_items, total_cost_value.
-        """
-        query = """
-            SELECT COUNT(DISTINCT ingredient_id), SUM(inv.quantity * i.cost_per_unit)
-            FROM inventory inv
-            JOIN ingredients i ON inv.ingredient_id = i.id
-            WHERE i.is_active = 1
-        """
-        try:
-            if self.db_path:
-                with get_db_connection(self.db_path) as db:
-                    row = db.execute_fetch_one(query)
-            else:
-                with get_db_connection() as db:
-                    row = db.execute_fetch_one(query)
-
-            return {
-                "total_items": row[0] or 0,
-                "total_value": row[1] or 0.0,
-            }
-        except Exception as e:
-            print(f"Error calculating inventory value: {e}")
-            return {"total_items": 0, "total_value": 0.0}
-
-    def add_ingredient(
+    def deduct_ingredients_for_sale(
         self,
-        name: str,
-        unit: str,
-        cost_per_unit: float,
-        reorder_level: float = 10,
-    ) -> bool:
-        """
-        Add new ingredient to inventory.
+        cursor: sqlite3.Cursor,
+        cart_items: List[Dict],
+        order_id: int,
+        performed_by: int,
+        strict_recipes: bool = True,
+        log_legacy_transactions: bool = True,
+    ) -> None:
+        required, errors = self.compute_required_ingredients(
+            cursor=cursor,
+            cart_items=cart_items,
+            strict_recipes=strict_recipes,
+        )
+        if errors:
+            raise ValueError("; ".join(errors))
 
-        Args:
-            name: Ingredient name.
-            unit: Unit of measurement (kg, liter, pieces, etc).
-            cost_per_unit: Cost per unit.
-            reorder_level: Reorder threshold.
+        shortages = self.validate_inventory(cursor, required)
+        if shortages:
+            msg = "Insufficient ingredients: " + ", ".join(
+                [f"{s['name']} short by {s['short_by']:.2f} {s['unit']}" for s in shortages]
+            )
+            raise ValueError(msg)
 
-        Returns:
-            True if successful, False otherwise.
-        """
-        try:
-            if self.db_path:
-                db_connection = get_db_connection(self.db_path)
-            else:
-                db_connection = get_db_connection()
-
-            with db_connection as db:
-                cursor = db.get_cursor()
-                cursor.execute(
-                    """INSERT INTO ingredients (name, unit, cost_per_unit, reorder_level, is_active)
-                       VALUES (?, ?, ?, ?, 1)""",
-                    (name, unit, cost_per_unit, reorder_level),
-                )
-                db.commit()
-                return True
-
-        except Exception as e:
-            print(f"Error adding ingredient: {e}")
-            return False
-
-    def deduct_stock_for_sale(self, product_id: int, quantity: int) -> bool:
-        """
-        Deduct product quantity for a completed sale (from POS).
-
-        Args:
-            product_id: Product ID.
-            quantity: Quantity sold.
-
-        Returns:
-            True if successful, False otherwise.
-        """
-        try:
-            if self.db_path:
-                db_connection = get_db_connection(self.db_path)
-            else:
-                db_connection = get_db_connection()
-
-            with db_connection as db:
-                cursor = db.get_cursor()
-
-                # Log as sale transaction
-                cursor.execute(
-                    """INSERT INTO transactions (type, product_id, quantity, unit_price, total_amount, notes)
-                       VALUES (?, ?, ?, 1, ?, 'Sale')""",
-                    ("sale", product_id, quantity, quantity),
-                )
-
-                db.commit()
-                return True
-
-        except Exception as e:
-            print(f"Error deducting stock: {e}")
-            return False
+        self.consume_inventory(
+            cursor=cursor,
+            required=required,
+            order_id=order_id,
+            performed_by=performed_by,
+            log_legacy_transactions=log_legacy_transactions,
+        )

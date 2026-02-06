@@ -1,17 +1,3 @@
-"""
-CAFÉCRAFT MAIN DASHBOARD
-
-Responsibilities:
-- Main application layout (header, sidebar, content)
-- Dynamic module loading (POS, Inventory, Reports, User Management)
-- User session info storage and display
-- Navigation between modules
-- Role-based sidebar visibility
-
-Uses auth.permissions for access control.
-No direct SQL queries.
-"""
-
 try:
     import customtkinter as ctk
     CTK_AVAILABLE = True
@@ -41,26 +27,18 @@ from config.settings import (
     FONT_NORMAL,
 )
 
+from ui.recipe_view import RecipeView
+
 
 class Dashboard:
-    """Main application dashboard with sidebar navigation and dynamic module loading."""
-
     def __init__(self, root_window):
-        """
-        Initialize dashboard.
-
-        Args:
-            root_window: The main CustomTkinter root window.
-        """
         self.root = root_window
         self.current_user = None
         self.current_module = None
         self.content_frame = None
+        self.db_path = "cafecraft.db"
 
-        # Build the dashboard layout
         self._build_layout()
-
-        # Show login screen first
         self._show_login()
 
     def _build_layout(self):
@@ -70,10 +48,8 @@ class Dashboard:
             main_container = tk.Frame(self.root, bg=COLOR_PRIMARY_BG)
         main_container.pack(fill="both", expand=True)
 
-        # Header (Top Navigation Bar)
         self._build_header(main_container)
 
-        # Main body container
         if CTK_AVAILABLE:
             body_container = ctk.CTkFrame(main_container, fg_color=COLOR_PRIMARY_BG)
         else:
@@ -84,43 +60,30 @@ class Dashboard:
         body_container.grid_columnconfigure(1, weight=1)
         body_container.grid_rowconfigure(0, weight=1)
 
-        # Sidebar (Left Navigation Panel)
         self.sidebar_frame = self._build_sidebar(body_container)
         self.sidebar_frame.grid(row=0, column=0, sticky="ns")
 
-        # Content Wrapper (adds spacing around content)
         if CTK_AVAILABLE:
-            content_wrapper = ctk.CTkFrame(
-                body_container,
-                fg_color="transparent"
-            )
+            content_wrapper = ctk.CTkFrame(body_container, fg_color="transparent")
         else:
             content_wrapper = tk.Frame(body_container, bg=COLOR_PRIMARY_BG)
 
         content_wrapper.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
-
         content_wrapper.grid_columnconfigure(0, weight=1)
         content_wrapper.grid_rowconfigure(0, weight=1)
 
-        # Main Content Area (Card Style)
         self.content_frame = self._build_content_area(content_wrapper)
         self.content_frame.grid(row=0, column=0, sticky="nsew")
 
     def _build_header(self, parent):
         if CTK_AVAILABLE:
-            header = ctk.CTkFrame(
-                parent,
-                height=70,
-                fg_color=COLOR_SECONDARY_BG,
-                corner_radius=0,
-            )
+            header = ctk.CTkFrame(parent, height=70, fg_color=COLOR_SECONDARY_BG, corner_radius=0)
         else:
             header = tk.Frame(parent, height=70, bg=COLOR_SECONDARY_BG)
 
         header.pack(fill="x")
         header.pack_propagate(False)
 
-        # Left: App Title
         if CTK_AVAILABLE:
             title_label = ctk.CTkLabel(
                 header,
@@ -139,12 +102,8 @@ class Dashboard:
 
         title_label.pack(side="left", padx=25)
 
-        # Right: User Info (inside subtle frame)
         if CTK_AVAILABLE:
-            user_frame = ctk.CTkFrame(
-                header,
-                fg_color="transparent"
-            )
+            user_frame = ctk.CTkFrame(header, fg_color="transparent")
         else:
             user_frame = tk.Frame(header, bg=COLOR_SECONDARY_BG)
 
@@ -177,15 +136,10 @@ class Dashboard:
                 corner_radius=0,
             )
         else:
-            sidebar = tk.Frame(
-                parent,
-                width=SIDEBAR_WIDTH,
-                bg=COLOR_SECONDARY_BG,
-            )
+            sidebar = tk.Frame(parent, width=SIDEBAR_WIDTH, bg=COLOR_SECONDARY_BG)
 
         sidebar.pack_propagate(False)
 
-        # Logo / Navigation Label
         if CTK_AVAILABLE:
             sidebar_title = ctk.CTkLabel(
                 sidebar,
@@ -204,7 +158,6 @@ class Dashboard:
 
         sidebar_title.pack(pady=(30, 20))
 
-        # Divider
         if CTK_AVAILABLE:
             divider = ctk.CTkFrame(sidebar, height=2, fg_color="#3a3a4e")
         else:
@@ -214,7 +167,6 @@ class Dashboard:
 
         self.sidebar_buttons_frame = sidebar
 
-        # Logout button (bottom)
         if CTK_AVAILABLE:
             logout_btn = ctk.CTkButton(
                 sidebar,
@@ -242,53 +194,37 @@ class Dashboard:
 
     def _build_content_area(self, parent):
         if CTK_AVAILABLE:
-            content = ctk.CTkFrame(
-                parent,
-                corner_radius=15,
-                fg_color="#252537",
-            )
+            content = ctk.CTkFrame(parent, corner_radius=15, fg_color="#252537")
         else:
             content = tk.Frame(parent, bg="#252537")
-
         return content
 
     def _show_login(self):
-        """Show login screen."""
         self._clear_content()
         self._clear_sidebar_modules()
         self._update_header()
-        # Render the login UI inside the content area so header/sidebar persist
         LoginScreen(self.content_frame, on_login_success=self._on_login_success)
 
     def _on_login_success(self, user_dict):
-        """Called when login is successful."""
         self.current_user = user_dict
         self._update_header()
         self._build_sidebar_buttons()
         self._show_default_module()
 
     def _show_default_module(self):
-        """Load the default module after successful login.
-
-        Chooses the first accessible module for the user's role, or shows
-        a placeholder if none are available.
-        """
         if not self.current_user:
             return
 
         modules = get_accessible_sidebar_modules(self.current_user.get("role", ""))
         if modules:
-            # Load the first accessible module
             default_key = modules[0].get("key")
             if default_key:
                 self._load_module(default_key)
                 return
 
-        # Fallback placeholder
         self._show_placeholder("Home")
 
     def _update_header(self):
-        """Update header with current user info."""
         if self.current_user:
             user_text = f"User: {self.current_user['name']} | Role: {self.current_user['role'].upper()}"
             self.user_info_label.configure(text=user_text)
@@ -296,22 +232,16 @@ class Dashboard:
             self.user_info_label.configure(text="")
 
     def _build_sidebar_buttons(self):
-        """Build navigation buttons based on user role."""
-        # Clear existing buttons (except title and logout)
         for widget in self.sidebar_buttons_frame.winfo_children():
-            if widget != self.user_info_label:
-                # Skip title and logout button
-                if hasattr(widget, "_is_module_button"):
-                    widget.destroy()
+            if hasattr(widget, "_is_module_button"):
+                widget.destroy()
 
         if not self.current_user:
             return
 
-        # Get accessible modules
         modules = get_accessible_sidebar_modules(self.current_user["role"])
 
-        # Create buttons for accessible modules
-        for i, module in enumerate(modules):
+        for module in modules:
             btn_text = module["label"]
             module_key = module["key"]
 
@@ -334,23 +264,49 @@ class Dashboard:
                     relief="flat",
                     command=lambda m=module_key: self._load_module(m),
                 )
+
             btn.pack(pady=8, padx=15, fill="x")
             btn._is_module_button = True
 
+        allowed_roles = {"owner", "admin", "manager", "inventory_staff"}
+        if self.current_user.get("role") in allowed_roles:
+            if CTK_AVAILABLE:
+                recipe_btn = ctk.CTkButton(
+                    self.sidebar_buttons_frame,
+                    text="Recipe Manager",
+                    width=SIDEBAR_WIDTH - 30,
+                    fg_color="#3a3a4e",
+                    hover_color="#4a4a5e",
+                    command=self._open_recipe_manager,
+                )
+            else:
+                recipe_btn = tk.Button(
+                    self.sidebar_buttons_frame,
+                    text="Recipe Manager",
+                    width=25,
+                    bg="#3a3a4e",
+                    fg=COLOR_TEXT_PRIMARY,
+                    relief="flat",
+                    command=self._open_recipe_manager,
+                )
+
+            recipe_btn.pack(pady=8, padx=15, fill="x")
+            recipe_btn._is_module_button = True
+
+    def _open_recipe_manager(self):
+        try:
+            RecipeView(self.root, db_path=self.db_path)
+        except Exception as e:
+            messagebox.showerror("Recipe Manager", f"Failed to open Recipe Manager: {e}")
+
     def _load_module(self, module_name):
-        """Load a module into the content area."""
-        # Check access
         if not can_access(self.current_user["role"], module_name):
-            messagebox.showerror(
-                "Unauthorized",
-                f"You do not have access to {module_name} module.",
-            )
+            messagebox.showerror("Unauthorized", f"You do not have access to {module_name} module.")
             return
 
         self._clear_content()
         self.current_module = module_name
 
-        # Load the appropriate module
         if module_name == "pos":
             self._load_pos_module()
         elif module_name == "inventory":
@@ -363,7 +319,6 @@ class Dashboard:
             self._show_placeholder(module_name)
 
     def _load_pos_module(self):
-        """Load POS module."""
         try:
             from pos.pos_manager import POSManager
             self.pos_manager = POSManager(
@@ -373,11 +328,9 @@ class Dashboard:
             )
         except Exception as e:
             self._show_placeholder("POS")
-            from tkinter import messagebox
             messagebox.showerror("Error", f"Failed to load POS module: {e}")
 
     def _load_inventory_module(self):
-        """Load Inventory module."""
         try:
             from inventory.inventory_manager import InventoryManager
             self.inventory_manager = InventoryManager(
@@ -387,42 +340,30 @@ class Dashboard:
             )
         except Exception as e:
             self._show_placeholder("Inventory")
-            from tkinter import messagebox
             messagebox.showerror("Error", f"Failed to load Inventory module: {e}")
 
     def _load_reports_module(self):
-        """Load Reports module."""
         try:
             from reports.reports_manager import ReportsManager
-            self.reports_manager = ReportsManager(
-                self.content_frame,
-                self.current_user,
-            )
+            self.reports_manager = ReportsManager(self.content_frame, self.current_user)
         except Exception as e:
             self._show_placeholder("Reports")
-            from tkinter import messagebox
             messagebox.showerror("Error", f"Failed to load Reports module: {e}")
 
     def _load_user_management_module(self):
-        """Load User Management module."""
         if not require_admin(self.current_user["role"]):
-            from tkinter import messagebox
-            messagebox.showerror(
-                "Unauthorized",
-                "You do not have permission to manage users.",
-            )
+            messagebox.showerror("Unauthorized", "You do not have permission to manage users.")
             return
 
         try:
             from auth.user_management_service import UserManagementService
             service = UserManagementService()
             users = service.get_all_users()
-            
-            # Simple placeholder for now - shows user list
+
             if CTK_AVAILABLE:
                 frame = ctk.CTkFrame(self.content_frame, fg_color=COLOR_PRIMARY_BG)
                 frame.pack(fill="both", expand=True, padx=10, pady=10)
-                
+
                 title = ctk.CTkLabel(
                     frame,
                     text="User Management",
@@ -430,6 +371,7 @@ class Dashboard:
                     text_color=COLOR_ACCENT,
                 )
                 title.pack(pady=20)
+
                 tree_parent = ctk.CTkFrame(frame, fg_color="transparent")
                 tree_parent.pack(fill="both", expand=True, padx=10, pady=10)
             else:
@@ -448,7 +390,6 @@ class Dashboard:
                 tree_parent = tk.Frame(frame, bg=COLOR_PRIMARY_BG)
                 tree_parent.pack(fill="both", expand=True, padx=10, pady=10)
 
-            # Users table (shared for CTK and Tk)
             cols = ("Username", "Full Name", "Role", "Active")
             tree = ttk.Treeview(tree_parent, columns=cols, show="headings", height=15)
             tree.heading("Username", text="Username")
@@ -463,54 +404,39 @@ class Dashboard:
 
             for user in users:
                 active_text = "Yes" if user["is_active"] else "No"
-                tree.insert("", "end", values=(
-                    user["username"],
-                    user["full_name"],
-                    user["role"],
-                    active_text,
-                ))
+                tree.insert("", "end", values=(user["username"], user["full_name"], user["role"], active_text))
 
             tree.pack(fill="both", expand=True)
+
         except Exception as e:
             self._show_placeholder("User Management")
-            from tkinter import messagebox
             messagebox.showerror("Error", f"Failed to load User Management: {e}")
 
     def _on_pos_transaction_complete(self, transaction_result):
-        """Handle completed POS transaction."""
         try:
-            # Log with inventory if needed
-            if hasattr(self, 'inventory_manager'):
-                for item in transaction_result['transaction_data']['items']:
+            if hasattr(self, "inventory_manager"):
+                for item in transaction_result["transaction_data"]["items"]:
                     self.inventory_manager.service.deduct_stock_for_sale(
-                        product_id=item['id'],
-                        quantity=item['quantity'],
+                        product_id=item["id"],
+                        quantity=item["quantity"],
                     )
-            
-            # Refresh reports if open
-            if hasattr(self, 'reports_manager'):
+
+            if hasattr(self, "reports_manager"):
                 self.reports_manager.refresh()
-                
+
         except Exception as e:
             print(f"Error processing transaction: {e}")
 
     def _on_inventory_update(self, inventory_data):
-        """Handle inventory update."""
         try:
-            # Refresh reports if open
-            if hasattr(self, 'reports_manager'):
+            if hasattr(self, "reports_manager"):
                 self.reports_manager.refresh()
         except Exception as e:
             print(f"Error updating reports: {e}")
 
     def _show_placeholder(self, module_name: str):
-        """Show a placeholder for a module."""
         if CTK_AVAILABLE:
-            placeholder = ctk.CTkFrame(
-                self.content_frame,
-                corner_radius=10,
-                fg_color="#2a2a3e",
-            )
+            placeholder = ctk.CTkFrame(self.content_frame, corner_radius=10, fg_color="#2a2a3e")
         else:
             placeholder = tk.Frame(self.content_frame, bg="#2a2a3e")
         placeholder.pack(fill="both", expand=True, padx=20, pady=20)
@@ -551,13 +477,11 @@ class Dashboard:
             description.pack(pady=10)
 
     def _clear_content(self):
-        """Clear all widgets from content area."""
         if self.content_frame:
             for widget in self.content_frame.winfo_children():
                 widget.destroy()
 
     def _clear_sidebar_modules(self):
-        """Remove sidebar module buttons (leave title and logout)."""
         if not hasattr(self, "sidebar_buttons_frame"):
             return
         for widget in self.sidebar_buttons_frame.winfo_children():
@@ -565,7 +489,6 @@ class Dashboard:
                 widget.destroy()
 
     def _logout(self):
-        """Logout current user."""
         if messagebox.askyesno("Confirm Logout", "Are you sure you want to logout?"):
             self.current_user = None
             self._clear_content()
@@ -574,5 +497,4 @@ class Dashboard:
             self._show_login()
 
     def show(self):
-        """Display the dashboard (run main loop)."""
         self.root.mainloop()
